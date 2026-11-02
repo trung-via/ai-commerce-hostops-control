@@ -1,0 +1,87 @@
+name: AI Commerce HostOps v3 private signed-envelope queue
+run-name: "HostOpsV3 Issue #${{ github.event.issue.number }}"
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostops-v3-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  queue:
+    if: >-
+      github.event.repository.private == true &&
+      github.event.repository.full_name == 'trung-via/ai-commerce-hostops-control' &&
+      github.event.issue.user.login == github.repository_owner &&
+      startsWith(github.event.issue.title, '[HOSTOPS3] ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      status: QUEUED_UNVERIFIED
+    steps:
+      - name: Check bounded dual-repo envelope structure; emit digest only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+
+          def reject():
+              raise SystemExit('HOSTOPS_V3_ENVELOPE_REJECTED')
+
+          def unique(items):
+              result = {}
+              for key, value in items:
+                  if key in result:
+                      reject()
+                  result[key] = value
+              return result
+
+          with open(os.environ['GITHUB_EVENT_PATH'], encoding='utf-8') as stream:
+              event = json.load(stream)
+          issue = event.get('issue', {})
+          body = issue.get('body')
+          if type(body) is not str or not 0 < len(body.encode('utf-8')) <= 131072:
+              reject()
+          try:
+              value = json.loads(body, object_pairs_hook=unique,
+                                 parse_float=lambda _: reject(),
+                                 parse_constant=lambda _: reject())
+          except (ValueError, UnicodeError, RecursionError):
+              reject()
+          fields = {'schema', 'request', 'issuer_signature_b64',
+                    'lease', 'lease_signature_b64', 'action_signature_b64'}
+          if type(value) is not dict or set(value) != fields:
+              reject()
+          if value['schema'] != 'hostops.envelope.v4':
+              reject()
+          request = value['request']
+          if type(request) is not dict or request.get('schema') != 'hostops.request.v4':
+              reject()
+          if (request.get('source_repository') != 'trung-via/ai-commerce'
+              or request.get('control_repository') != 'trung-via/ai-commerce-hostops-control'):
+              reject()
+          if type(request.get('source_sha')) is not str or not re.fullmatch('[0-9a-f]{40}', request['source_sha']):
+              reject()
+          for field in ('issuer_signature_b64', 'lease_signature_b64', 'action_signature_b64'):
+              if type(value[field]) is not str or len(value[field]) > 16384:
+                  reject()
+          if type(value['lease']) is not dict:
+              reject()
+          canonical = (json.dumps(value, sort_keys=True, separators=(',', ':'),
+                                  ensure_ascii=True) + '\n').encode('ascii')
+          number = issue.get('number')
+          if type(number) is not int or number < 1:
+              reject()
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='ascii') as stream:
+              stream.write('issue_number=' + str(number) + '\n')
+              stream.write('envelope_sha256=' + hashlib.sha256(canonical).hexdigest() + '\n')
+          print('HOSTOPS_V3_QUEUED_UNVERIFIED')
+          PY
