@@ -1,0 +1,86 @@
+name: AI Commerce Personal HostOps (simple single-user)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/personal-hostops.yml"
+      - "scripts/personal_hostops.py"
+      - "tests/test_personal_hostops.py"
+      - "README.md"
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-hostops-\${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  source-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run isolated source tests
+        shell: pwsh
+        run: python -m unittest discover -s tests -p "test_personal_hostops.py" -v
+
+  personal-operation:
+    if: >-
+      github.event.repository.private == true &&
+      github.actor == github.repository_owner &&
+      (
+        (github.event_name == 'issues' &&
+         startsWith(github.event.issue.title, '[HOSTOPS READ] ')) ||
+        (github.event_name == 'issue_comment' &&
+         startsWith(github.event.issue.title, '[HOSTOPS WRITE] ') &&
+         github.event.comment.body == format('APPROVE WRITE #{0}', github.event.issue.number))
+      )
+    runs-on: [self-hosted, Windows, hostops-personal]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Execute exactly one bounded operation
+        shell: pwsh
+        env:
+          HOSTOPS_PERSONAL_MODE: \${{ github.event_name == 'issues' && 'read' || 'write' }}
+        run: |
+          python scripts/personal_hostops.py --mode "$env:HOSTOPS_PERSONAL_MODE" --output "$env:RUNNER_TEMP\personal-hostops-result.json"
+          exit $LASTEXITCODE
+      - name: Return private Issue result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const file = process.env.RUNNER_TEMP + '/personal-hostops-result.json';
+            let result = {status:'BLOCKED',code:'NO_WINDOWS_RECEIPT'};
+            if (fs.existsSync(file)) {
+              try { result = JSON.parse(fs.readFileSync(file, 'utf8')); }
+              catch (_) { result = {status:'BLOCKED',code:'RESULT_INVALID'}; }
+            }
+            const body = 'PERSONAL_HOSTOPS_RESULT_V1\n' +
+              '\x60\x60\x60json\n' + JSON.stringify(result) + '\n\x60\x60\x60';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
