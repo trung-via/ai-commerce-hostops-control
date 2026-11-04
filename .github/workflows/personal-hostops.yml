@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: personal-hostops-\${{ github.event.issue.number || github.run_id }}
+  group: personal-hostops-${{ github.event.issue.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -60,7 +60,7 @@ jobs:
       - name: Execute exactly one bounded operation
         shell: pwsh
         env:
-          HOSTOPS_PERSONAL_MODE: \${{ github.event_name == 'issues' && 'read' || 'write' }}
+          HOSTOPS_PERSONAL_MODE: ${{ github.event_name == 'issues' && 'read' || 'write' }}
         run: |
           python scripts/personal_hostops.py --mode "$env:HOSTOPS_PERSONAL_MODE" --output "$env:RUNNER_TEMP\personal-hostops-result.json"
           exit $LASTEXITCODE
