@@ -1,21 +1,17 @@
 # AI Commerce — private HostOps control plane
 
-This repository is the **private request and receipt boundary** for the HostOps v3 architecture documented in [public Issue #248](https://github.com/trung-via/ai-commerce/issues/248).
+**Current preferred design: Personal Mode v1 (2026-11-04).** This is a personal project with ONE Windows login. The previous separate broker/signer layers are not required for the first limited live deployment.
 
-- **Public source/CI:** `trung-via/ai-commerce` (must stay public).
-- **Private control/receipts:** `trung-via/ai-commerce-hostops-control` (must stay private).
-- **Laptop:** isolated non-admin broker and transport identities, signed immutable releases, strict local ACL, fail-closed KILL, no inbound internet listener.
-- **No self-hosted Actions runner and no request execution in this repository.** The queue workflow only checks shape and records a SHA-256 digest. `QUEUED_UNVERIFIED` is never a signed approval or a live-host receipt.
+- **READ:** Human approves in the current ChatGPT conversation; ChatGPT creates a private `[HOSTOPS READ]` Issue. The private Windows runner runs allowlisted read operations without another approval.
+- **WRITE:** ChatGPT creates a private `[HOSTOPS WRITE]` Issue. The Human posts exactly `APPROVE WRITE #N` in the GitHub mobile Issue. Only this owner comment triggers a bounded create-new file write. No separate Android SSHSIG or source-hash hand transcription.
+- **Transport:** ChatGPT → private GitHub Issue → repository-scoped Windows self-host runner (`hostops-personal`) → private Issue receipt → ChatGPT.
 
-**Current installation status: NOT INSTALLED / NOT ENABLED.** No GitHub workflow can enable a Windows broker, acquire local signing keys, change Windows accounts/ACLs, or grant itself laptop read/write privileges. An independently installed, authenticated and explicitly enabled local transport is required for any eventual operation.
+Full runbook and bounded JSON contracts: [PERSONAL_HOSTOPS.md](PERSONAL_HOSTOPS.md).
 
-Never put private keys, GitHub tokens, Windows credentials, arbitrary host file contents or installer logs into Issues/commits/Actions output. Even private GitHub history is not a secret vault.
+## Actual activation status
 
-## Intended activation sequence
+The new source and workflow require review/merge. A private Windows runner must be separately registered and observed online; the existing public EF02 runner is NOT the private runner. There is **no proven live personal read/write** until the GitHub Issue and native Windows evidence show it. No automatic installation, privilege escalation, or arbitrary PowerShell.
 
-1. Independently review and merge the **public** HostOps v3 protocol change binding each signed request to both repository identities and an immutable public source SHA.
-2. Validate an exact private queue workflow digest against the signed release manifest; verify completed GitHub-run provenance; keep hosted runner only.
-3. Human signs/enrolls the immutable release and leases on the laptop, verifies dedicated Windows SIDs, DACL, KILL/revocations, and separate transport token scope.
-4. Demonstrate one bounded, signed read operation with a native Windows IPC and disk receipt; approve write operations separately. Do not assert full access from source CI.
+The older `.github/workflows/hostops-v3.yml` is a historical *queue-only* contract and has no laptop execution. HostOps W1.3 requests associated with private Issues #6/#7 are CONSUMED / NO_RETRY. Preserve their evidence.
 
-This bootstrap repository has **no live host capability**.
+The simplified one-account model knowingly lacks strong isolation from other processes under the same Windows SID, including the existing PUBLIC self-host runner. Keep sensitive provider credentials outside its access, and do not run untrusted public PR code during private HostOps operations.
