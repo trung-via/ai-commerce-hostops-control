@@ -22,7 +22,9 @@ concurrency:
 jobs:
   source-tests:
     if: github.event_name == 'pull_request'
-    runs-on: windows-latest
+    # Private runner is also the only required live setup. Avoid hosted
+    # private-repository billing/quota and keep Windows-only verification.
+    runs-on: [self-hosted, Windows, hostops-personal]
     permissions:
       contents: read
     timeout-minutes: 6
